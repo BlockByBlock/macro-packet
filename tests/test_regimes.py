@@ -2,17 +2,10 @@
 softmax temperature, financial combination, impulse direction.
 """
 
-import math
-
 import pytest
 
 from macro_packet.store import Observation
-from macro_packet.regimes import (
-    SOFTMAX_TEMPERATURE,
-    economic_regime,
-    financial_regime,
-    regime_impulse,
-)
+from macro_packet.regimes import economic_regime, financial_regime, regime_impulse
 
 
 def test_quadrant_classification_matches_clear_cut_readings():
@@ -46,13 +39,10 @@ def test_primary_label_is_argmax_and_affinities_sum_to_one():
 
 
 def test_temperature_is_pinned_by_distance_behaviour():
-    t = SOFTMAX_TEMPERATURE
     # At an exact center the two diagonal neighbors sit at distance^2=4 and
-    # the far corner at 8: affinity = 1/(1 + 2*e^{-4/t} + e^{-8/t}).
+    # the far corner at 8; with T=0.5 that yields ~0.9993294.
     affinities, _ = economic_regime(1.0, -1.0)
-    assert affinities["goldilocks"] == pytest.approx(
-        1 / (1 + 2 * math.exp(-4 / t) + math.exp(-8 / t)), rel=1e-6
-    )
+    assert affinities["goldilocks"] == pytest.approx(0.9993294, rel=1e-6)
     # At the midpoint between two centers both share equally.
     mid = economic_regime(0.0, -1.0)[0]
     assert mid["goldilocks"] == pytest.approx(mid["disinflationary_slowdown"])

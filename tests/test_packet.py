@@ -1,6 +1,6 @@
 from conftest import AS_OF, seed_scenario
 
-from macro_packet.packet import build_packet, estimate_tokens, render_packet
+from macro_packet.packet import build_packet, render_packet
 from macro_packet.store import Store
 
 
@@ -44,7 +44,7 @@ def test_byte_determinism_across_repeated_runs(tmp_path):
 def test_routine_packet_stays_within_token_budget(shocked_store):
     text = render_packet(build_packet(shocked_store, AS_OF))
     # ~300-token ceiling on a realistic busy day (rough estimate, not a tokenizer)
-    assert estimate_tokens(text) <= 300, text
+    assert len(text) // 4 <= 300, text  # rough chars/4 token estimate
 
 
 def test_empty_driver_and_contra_sections_render_cleanly(quiet_store):

@@ -9,13 +9,6 @@ treated as unavailable). Factor code never reads series ids directly.
 from dataclasses import dataclass
 
 FACTORS = ("G", "I", "R", "L", "S")
-FACTOR_NAMES = {
-    "G": "Growth",
-    "I": "Inflation",
-    "R": "Rates Pressure",
-    "L": "Liquidity Pressure",
-    "S": "Financial Stress",
-}
 
 
 @dataclass(frozen=True)

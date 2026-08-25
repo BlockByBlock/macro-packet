@@ -74,8 +74,3 @@ def render_packet(p):
         else:
             lines.extend(f"  - {c.series} benign" for c in items)
     return "\n".join(lines) + "\n"
-
-
-def estimate_tokens(text):
-    """Rough size check (chars/4); deliberately not a tokenizer."""
-    return len(text) // 4

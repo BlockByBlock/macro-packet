@@ -55,11 +55,11 @@ def evaluate(current, previous):
         reasons.append(f"regime change: {before['econ']} -> {after['econ']}")
     if before["financial"] != after["financial"]:
         reasons.append(f"financial regime change: {before['financial']} -> {after['financial']}")
-    for factor, state_now in sorted(after["states"].items()):
+    for factor, state_now in after["states"].items():
         delta = state_now - before["states"][factor]
         if abs(delta) >= FACTOR_MOVE_THRESHOLD:
             reasons.append(f"{factor} moved {delta:+.2f}")
-    for factor, word_now in sorted(after["impulses"].items()):
+    for factor, word_now in after["impulses"].items():
         if word_now != before["impulses"][factor]:
             reasons.append(f"{factor} impulse flipped {before['impulses'][factor]} -> {word_now}")
     if after["stress"] - before["stress"] >= STRESS_JUMP_THRESHOLD:
