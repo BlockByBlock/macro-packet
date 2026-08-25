@@ -1,6 +1,10 @@
 # Issue tracker: Local Markdown
 
-Issues and specs for this repo live as markdown files in `.scratch/`.
+Issues and specs for this repo live as GitHub Issues
+(https://github.com/BlockByBlock/macro-packet/issues), triaged with the
+labels in [`triage-labels.md`](triage-labels.md). The legacy local-markdown
+tracker under `.scratch/<feature-slug>/issues/` is deprecated; its files are
+historical record.
 
 ## Conventions
 
