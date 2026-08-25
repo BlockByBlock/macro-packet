@@ -10,9 +10,13 @@ Respect: clamped z-score contributions and renormalization policy (ADR-0004), CO
 
 **Status:** ready-for-agent
 
-- [ ] Indicator specs are config-driven, not hard-coded into factor logic
-- [ ] Polarity is respected: rising claims lowers Growth, rising yields raise Rates Pressure
-- [ ] Contributions sum to the factor state; individual contributions are retrievable
-- [ ] Missing indicator → renormalized weights, degraded confidence visible in output
-- [ ] Point-in-time test: a calculation at a past as-of boundary never sees later releases
-- [ ] Determinism test: same store + same code → identical state output bytes
+- [x] Indicator specs are config-driven, not hard-coded into factor logic
+- [x] Polarity is respected: rising claims lowers Growth, rising yields raise Rates Pressure
+- [x] Contributions sum to the factor state; individual contributions are retrievable
+- [x] Missing indicator → renormalized weights, degraded confidence visible in output
+- [x] Point-in-time test: a calculation at a past as-of boundary never sees later releases
+- [x] Determinism test: same store + same code → identical state output bytes
+
+## Comments
+
+Implemented on branch `slice1-factor-engine`: `specs.py` (declarative config), `engine.py` (clamped-z contributions, renormalization, confidence, impulses), `macro-packet state` command.

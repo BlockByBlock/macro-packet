@@ -8,7 +8,11 @@ Respect: glossary definitions of driver and contradiction including their caps; 
 
 **Status:** ready-for-agent
 
-- [ ] Driver list capped at 5, ranked by the documented formula
-- [ ] Contradiction list capped at 3, showing genuine cross-signal disagreement (e.g. growth down but claims benign)
-- [ ] Both computable at an arbitrary as-of boundary
-- [ ] Insignificant days can yield empty driver lists rather than noise
+- [x] Driver list capped at 5, ranked by the documented formula
+- [x] Contradiction list capped at 3, showing genuine cross-signal disagreement (e.g. growth down but claims benign)
+- [x] Both computable at an arbitrary as-of boundary
+- [x] Insignificant days can yield empty driver lists rather than noise
+
+## Comments
+
+`diagnostics.py`: drivers capped at 5 ranked by |standardized shock| x hand-set weight; contradictions capped at 3 strongest cross-signal conflicts; both accept an arbitrary as-of boundary; quiet stores yield empty lists.

@@ -8,7 +8,11 @@ This is the acceptance gate for the whole slice-1 effort: if this command's outp
 
 **Status:** ready-for-agent
 
-- [ ] Packet matches the §33 target shape (asof, econ, financial, G/I/R/L/S lines, drivers, contra)
-- [ ] Routine packet stays within ~300 tokens on real data (rough token estimate, not tokenizer CI)
-- [ ] Byte-determinism test green across repeated runs
-- [ ] Empty driver/contra sections render cleanly rather than being omitted silently
+- [x] Packet matches the §33 target shape (asof, econ, financial, G/I/R/L/S lines, drivers, contra)
+- [x] Routine packet stays within ~300 tokens on real data (rough token estimate, not tokenizer CI)
+- [x] Byte-determinism test green across repeated runs
+- [x] Empty driver/contra sections render cleanly rather than being omitted silently
+
+## Comments
+
+`packet.py` + `macro-packet packet` (§33 shape, compact G/I/R/L/S aliases, confirm line, empty sections render as `[]`, byte-determinism test, rough token-budget test).

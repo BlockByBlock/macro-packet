@@ -8,8 +8,12 @@ Thresholds start as explicit config placeholders to be tuned from observed behav
 
 **Status:** ready-for-agent
 
-- [ ] Insignificant update sequence (e.g. growth −0.31 → −0.32) suppresses the agent call
-- [ ] Material sequence (e.g. WTI shock + inflation jump) triggers it, with reasons recorded
-- [ ] Generated prompt names only actual anomalies — no generic "research macro conditions"
-- [ ] Prompt includes the instruction to attempt falsification of the classification
-- [ ] No automated agent execution anywhere
+- [x] Insignificant update sequence (e.g. growth −0.31 → −0.32) suppresses the agent call
+- [x] Material sequence (e.g. WTI shock + inflation jump) triggers it, with reasons recorded
+- [x] Generated prompt names only actual anomalies — no generic "research macro conditions"
+- [x] Prompt includes the instruction to attempt falsification of the classification
+- [x] No automated agent execution anywhere
+
+## Comments
+
+`materiality.py` + `should-query-agent` / `agent-prompt` commands; thresholds are explicit placeholders; reasons recorded in SQLite `gate_log`; snapshots recorded by `packet`; prompt names only actual anomalies and demands falsification; no automated agent execution anywhere.

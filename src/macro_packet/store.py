@@ -17,6 +17,17 @@ CREATE TABLE IF NOT EXISTS observations (
 );
 CREATE INDEX IF NOT EXISTS idx_observations_series_release
     ON observations (series, release_timestamp);
+CREATE TABLE IF NOT EXISTS snapshots (
+    asof       TEXT PRIMARY KEY,
+    payload    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS gate_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluated_at  TEXT NOT NULL,
+    material      INTEGER NOT NULL,
+    reasons       TEXT NOT NULL
+);
 """
 
 
@@ -80,3 +91,31 @@ class Store:
                 (series, as_of),
             )
         ]
+
+    def save_snapshot(self, as_of, payload):
+        """Record the packet payload produced at an as-of boundary (upsert)."""
+        created_at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO snapshots (asof, payload, created_at) VALUES (?, ?, ?)"
+                " ON CONFLICT(asof) DO UPDATE SET payload=excluded.payload,"
+                " created_at=excluded.created_at",
+                (as_of, payload, created_at),
+            )
+
+    def latest_snapshot_before(self, as_of):
+        """Most recent recorded snapshot strictly before the given boundary."""
+        row = self._conn.execute(
+            "SELECT asof, payload FROM snapshots WHERE asof < ?"
+            " ORDER BY asof DESC LIMIT 1",
+            (as_of,),
+        ).fetchone()
+        return {"as_of": row[0], "payload": row[1]} if row else None
+
+    def record_gate(self, material, reasons):
+        evaluated_at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO gate_log (evaluated_at, material, reasons) VALUES (?, ?, ?)",
+                (evaluated_at, 1 if material else 0, "\n".join(reasons)),
+            )
