@@ -1,14 +1,18 @@
 """Five-factor engine: clamped z-score contributions summed into factor states.
 
 Every calculation takes an explicit as-of boundary; nothing here ever asks
-for "latest" without one. All data flows through the point-in-time store,
-so a past boundary can only see releases made on or before it.
+for "latest" without one. All data flows through the point-in-time store.
+
+Structure: `analyze` makes the single store pass (readings at the boundary
+and one lookback earlier); everything downstream is a pure transform of
+that analysis.
 """
 
 import datetime
 import math
 from dataclasses import dataclass
 
+from macro_packet.regimes import economic_regime, financial_regime
 from macro_packet.specs import (
     FACTORS,
     FLAT_THRESHOLD,
@@ -34,8 +38,20 @@ class FactorState:
     factor: str
     state: float       # sum of contributions
     confidence: float  # available weight / total hand-set weight
-    missing: tuple     # series treated as unavailable at this boundary
+    missing: tuple = ()        # series treated as unavailable at this boundary
     contributions: tuple = ()  # individual Readings: auditable down to inputs
+
+
+@dataclass(frozen=True)
+class Analysis:
+    """Everything derivable from one store pass at one as-of boundary."""
+
+    as_of: str
+    readings: dict         # series -> (spec, z) at as_of
+    before_readings: dict  # same, one lookback earlier
+    factors: dict          # factor -> FactorState
+    before_factors: dict
+    impulses: dict         # factor -> up/down/flat
 
 
 def parse_date(iso):
@@ -82,28 +98,31 @@ def indicator_readings(store, specs, as_of):
     return readings
 
 
-def factor_states(store, as_of, specs=INDICATORS):
-    """Factor states at `as_of`: contributions summed per factor.
+def factor_states(readings, specs=INDICATORS):
+    """Factor states from a set of readings: contributions summed per factor.
 
     Weights renormalize over available indicators so contributions always
     sum to the factor state; the shortfall shows up as reduced confidence.
     """
-    readings = indicator_readings(store, specs, as_of)
     by_factor = {f: [] for f in FACTORS}
     for spec, z in readings.values():
         by_factor[spec.factor].append((spec, z))
 
+    total_weights = {f: sum(s.weight for s in specs if s.factor == f) for f in FACTORS}
     states = {}
     for factor, members in by_factor.items():
-        total_weight = sum(s.weight for s in specs if s.factor == factor)
         available_weight = sum(s.weight for s, _ in members)
-        contributions = []
-        for spec, z in sorted(members, key=lambda m: m[0].series):
-            w = spec.weight / available_weight if available_weight else 0.0
-            contributions.append(Reading(spec.series, factor, round(z, 6), round(w, 6), round(z * w, 6)))
+        contributions = [
+            Reading(spec.series, factor, round(z, 6),
+                    round(spec.weight / available_weight, 6) if available_weight else 0.0,
+                    round(z * spec.weight / available_weight, 6) if available_weight else 0.0)
+            for spec, z in sorted(members, key=lambda m: m[0].series)
+        ]
         missing = tuple(sorted(
-            s.series for s in specs if s.factor == factor and s.series not in readings
+            s.series for s in specs if s.factor == factor
+            and s.series not in readings
         ))
+        total_weight = total_weights[factor]
         states[factor] = FactorState(
             factor=factor,
             state=round(sum(c.contribution for c in contributions), 6),
@@ -114,44 +133,58 @@ def factor_states(store, as_of, specs=INDICATORS):
     return states
 
 
-def compute_state(store, as_of, specs=INDICATORS):
-    """Full snapshot at `as_of`: factor states plus impulses.
-
-    An impulse is the factor's recent rate of change: the state difference
-    against the same calculation one lookback earlier, classified up/down/flat.
-    """
-    now = factor_states(store, as_of, specs)
-    before = factor_states(store, lookback_boundary(as_of), specs)
-
+def factor_impulses(factors, before_factors):
+    """Impulse = recent rate of change of the state, classified up/down/flat."""
     impulses = {}
-    for factor, fs in now.items():
-        delta = fs.state - before[factor].state
-        if abs(delta) < FLAT_THRESHOLD:
-            impulses[factor] = "flat"
-        else:
-            impulses[factor] = "up" if delta > 0 else "down"
-    return {"as_of": as_of, "factors": now, "impulses": impulses, "before": before}
+    for factor, fs in factors.items():
+        delta = fs.state - before_factors[factor].state
+        impulses[factor] = "flat" if abs(delta) < FLAT_THRESHOLD \
+            else ("up" if delta > 0 else "down")
+    return impulses
 
 
-def render_state(snapshot):
-    """Deterministic YAML rendering of a state snapshot."""
-    lines = [f"asof: {parse_date(snapshot['as_of']).isoformat()}"]
-    for factor in FACTORS:
-        fs = snapshot["factors"][factor]
-        lines.append(f"{factor}: [{_num(fs.state)}, {snapshot['impulses'][factor]}, {_conf(fs.confidence)}]")
-    missing = [s for f in FACTORS for s in snapshot["factors"][f].missing]
-    if missing:
-        lines.append("missing:")
-        for series in missing:
-            lines.append(f"  - {series}")
-    return "\n".join(lines) + "\n"
+def analyze(store, as_of, specs=INDICATORS):
+    """The single store pass every downstream computation consumes."""
+    readings = indicator_readings(store, specs, as_of)
+    before_readings = indicator_readings(store, specs, lookback_boundary(as_of))
+    factors = factor_states(readings, specs)
+    before_factors = factor_states(before_readings, specs)
+    return Analysis(
+        as_of=as_of,
+        readings=readings,
+        before_readings=before_readings,
+        factors=factors,
+        before_factors=before_factors,
+        impulses=factor_impulses(factors, before_factors),
+    )
 
 
-def _num(x):
+def fmt_signed(x):
     return f"{x:+.2f}"
 
 
-def _conf(c):
+def fmt_conf(c):
     return f"{c:.2f}"
 
 
+def render_state(a):
+    """Deterministic YAML rendering of an analysis: factors plus both regimes."""
+    lines = [f"asof: {parse_date(a.as_of).isoformat()}"]
+    for factor in FACTORS:
+        fs = a.factors[factor]
+        lines.append(
+            f"{factor}: [{fmt_signed(fs.state)}, {a.impulses[factor]}, {fmt_conf(fs.confidence)}]"
+        )
+    affinities, primary = economic_regime(a.factors["G"].state, a.factors["I"].state)
+    lines.append(f"econ: {primary}")
+    lines.append("econ_affinity:")
+    lines.extend(f"  {name}: {affinities[name]:.2f}" for name in sorted(affinities))
+    lines.append(
+        "financial: "
+        + financial_regime(a.factors["R"].state, a.factors["L"].state, a.factors["S"].state)
+    )
+    missing = [s for f in FACTORS for s in a.factors[f].missing]
+    if missing:
+        lines.append("missing:")
+        lines.extend(f"  - {series}" for series in missing)
+    return "\n".join(lines) + "\n"

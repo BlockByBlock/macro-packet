@@ -117,7 +117,7 @@ def test_packet_command_stores_contributions_individually(tmp_path):
     from collections import defaultdict
 
     from conftest import AS_OF
-    from macro_packet.engine import compute_state
+    from macro_packet.engine import analyze
 
     db = tmp_path / "c.db"
     _seed_full_store(db)
@@ -128,6 +128,6 @@ def test_packet_command_stores_contributions_individually(tmp_path):
     sums = defaultdict(float)
     for _series, factor, _z, _weight, contribution in rows:
         sums[factor] += contribution
-    states = compute_state(Store(db), AS_OF)["factors"]
+    states = analyze(Store(db), AS_OF).factors
     for factor, total in sums.items():
         assert abs(total - states[factor].state) < 1e-6

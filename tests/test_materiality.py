@@ -12,7 +12,7 @@ from macro_packet.materiality import (
     agent_prompt,
     evaluate,
     research_questions,
-    snapshot_payload,
+    dump_core,
 )
 from macro_packet.packet import build_packet
 from macro_packet.store import Store
@@ -29,7 +29,7 @@ def test_insignificant_update_sequence_suppresses_agent_call(tmp_path):
     seed_scenario(Store(db))  # flat baseline: nothing moves anywhere
     current = _packet(db, AS_OF)
 
-    previous_payload = snapshot_payload(_packet(db, EARLIER))
+    previous_payload = dump_core(_packet(db, EARLIER))
     reasons = evaluate(current, {"as_of": EARLIER, "payload": previous_payload})
     assert reasons == []  # e.g. growth -0.31 -> -0.32 style noise stays silent
 
@@ -41,7 +41,7 @@ def test_material_sequence_triggers_with_recorded_reasons(tmp_path):
 
     baseline_store = Store(":memory:")
     seed_scenario(baseline_store)  # same store shape, no shock
-    previous_payload = snapshot_payload(build_packet(baseline_store, AS_OF))
+    previous_payload = dump_core(build_packet(baseline_store, AS_OF))
 
     reasons = evaluate(current, {"as_of": AS_OF, "payload": previous_payload})
     assert reasons, "oil shock + breakeven jump must trip the gate"
@@ -85,10 +85,10 @@ def test_no_automated_agent_execution_anywhere():
     assert isinstance(agent_prompt.__doc__, str)
 
 
-def test_snapshot_payload_is_deterministic_json(tmp_path):
+def test_dump_core_is_deterministic_json(tmp_path):
     db = tmp_path / "snap.db"
-    p1 = snapshot_payload(build_packet(seed_scenario(Store(db)), AS_OF))
-    p2 = snapshot_payload(build_packet(seed_scenario(Store(":memory:")), AS_OF))
+    p1 = dump_core(build_packet(seed_scenario(Store(db)), AS_OF))
+    p2 = dump_core(build_packet(seed_scenario(Store(":memory:")), AS_OF))
     assert json.loads(p1)["states"] == json.loads(p2)["states"]
     assert p1 == p2
 

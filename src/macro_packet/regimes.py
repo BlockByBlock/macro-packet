@@ -8,8 +8,6 @@ stress states.
 
 import math
 
-from macro_packet.specs import FLAT_THRESHOLD
-
 # Quadrant centers (Growth, Inflation). Temperature pinned by tests in
 # tests/test_regimes.py.
 REGIME_CENTERS = (
@@ -22,6 +20,9 @@ SOFTMAX_TEMPERATURE = 0.5
 
 # Financial-regime wording thresholds (state-space, tunable placeholders).
 FINANCIAL_THRESHOLD = 0.25
+
+# Combined slowdown-affinity change that counts as deterioration.
+REGIME_IMPULSE_FLOOR = 0.025
 
 _SLOWDOWN = ("stagflationary_slowdown", "disinflationary_slowdown")
 
@@ -68,18 +69,4 @@ def regime_impulse(growth_now, inflation_now, growth_then, inflation_then):
     aff_then, _ = economic_regime(growth_then, inflation_then)
     bad_now = sum(aff_now[s] for s in _SLOWDOWN)
     bad_then = sum(aff_then[s] for s in _SLOWDOWN)
-    return "deteriorating" if bad_now > bad_then + FLAT_THRESHOLD / 2 else "improving"
-
-
-def render_regimes(growth, inflation, impulse, rates, liquidity, stress):
-    """Deterministic YAML lines for both regimes with the affinity map."""
-    affinities, primary = economic_regime(growth, inflation)
-    lines = [
-        f"econ: {primary}",
-        f"econ_impulse: {impulse}",
-        f"financial: {financial_regime(rates, liquidity, stress)}",
-        "econ_affinity:",
-    ]
-    for name in sorted(affinities):
-        lines.append(f"  {name}: {affinities[name]:.2f}")
-    return "\n".join(lines)
+    return "deteriorating" if bad_now > bad_then + REGIME_IMPULSE_FLOOR else "improving"

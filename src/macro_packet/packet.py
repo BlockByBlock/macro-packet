@@ -6,46 +6,42 @@ compact YAML matching the source plan's §33 milestone shape. Byte-for-byte
 deterministic given the same store and code.
 """
 
-from macro_packet.diagnostics import Driver, Contradiction, drivers, contradictions
-from macro_packet.engine import parse_date, compute_state
+from macro_packet.diagnostics import contradictions, drivers
+from macro_packet.engine import analyze, fmt_conf, fmt_signed, parse_date
 from macro_packet.regimes import economic_regime, financial_regime, regime_impulse
 from macro_packet.specs import FACTORS, INDICATORS
 
-# Factor-specific impulse vocabulary: same numbers, factor-native wording.
-IMPULSE_WORDS = {
-    "G": {"up": "up", "down": "down", "flat": "flat"},
-    "I": {"up": "up", "down": "down", "flat": "flat"},
-    "R": {"up": "up", "down": "down", "flat": "flat"},
-    "L": {"up": "tighter", "down": "easier", "flat": "flat"},
-    "S": {"up": "rising", "down": "calming", "flat": "flat"},
+# Factor-specific impulse wording overrides; factors not listed use the
+# plain up/down/flat vocabulary.
+IMPULSE_WORD_OVERRIDES = {
+    "L": {"up": "tighter", "down": "easier"},
+    "S": {"up": "rising", "down": "calming"},
 }
 
-# Compact aliases are defined once here: G/I/R/L/S factor keys in output.
+
+def impulse_word(factor, impulse):
+    return IMPULSE_WORD_OVERRIDES.get(factor, {}).get(impulse, impulse)
 
 
 def build_packet(store, as_of, specs=INDICATORS):
     """Compute every packet ingredient at an explicit as-of boundary."""
-    snap = compute_state(store, as_of, specs)
-    f = snap["factors"]
-    imp = snap["impulses"]
-    before = snap["before"]
+    a = analyze(store, as_of, specs)
+    f, b = a.factors, a.before_factors
 
     affinities, primary = economic_regime(f["G"].state, f["I"].state)
     econ_impulse = regime_impulse(
-        f["G"].state, f["I"].state, before["G"].state, before["I"].state
+        f["G"].state, f["I"].state, b["G"].state, b["I"].state
     )
-    fin = financial_regime(f["R"].state, f["L"].state, f["S"].state)
-
     return {
-        "as_of": as_of,
+        "as_of": a.as_of,
         "factors": f,
-        "impulses": imp,
+        "impulses": a.impulses,
         "econ": primary,
         "econ_affinity": round(affinities[primary], 2),
         "econ_impulse": econ_impulse,
-        "financial": fin,
-        "drivers": drivers(store, as_of, specs),
-        "contra": contradictions(store, as_of, specs),
+        "financial": financial_regime(f["R"].state, f["L"].state, f["S"].state),
+        "drivers": drivers(a.readings, a.before_readings, specs),
+        "contra": contradictions(a.readings, f, specs),
         "confirm": _confirmation(econ_impulse, f["S"].state),
     }
 
@@ -68,15 +64,15 @@ def render_packet(p):
     lines.append(f"financial: {p['financial']}")
     for factor in FACTORS:
         fs = p["factors"][factor]
-        word = IMPULSE_WORDS[factor][p["impulses"][factor]]
-        lines.append(f"{factor}: [{fs.state:+.2f}, {word}, {fs.confidence:.2f}]")
+        word = impulse_word(factor, p["impulses"][factor])
+        lines.append(f"{factor}: [{fmt_signed(fs.state)}, {word}, {fmt_conf(fs.confidence)}]")
     lines.append(f"confirm: {p['confirm']}")
-    lines.append("drivers:" if p["drivers"] else "drivers: []")
-    for d in p["drivers"]:
-        lines.append(f"  - {d.series} {d.shock:+.1f}z")
-    lines.append("contra:" if p["contra"] else "contra: []")
-    for c in p["contra"]:
-        lines.append(f"  - {c.series} benign")
+    for section, items in (("drivers", p["drivers"]), ("contra", p["contra"])):
+        lines.append(f"{section}: []" if not items else f"{section}:")
+        if section == "drivers":
+            lines.extend(f"  - {d.series} {d.shock:+.1f}z" for d in items)
+        else:
+            lines.extend(f"  - {c.series} benign" for c in items)
     return "\n".join(lines) + "\n"
 
 

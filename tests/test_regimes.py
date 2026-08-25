@@ -6,12 +6,12 @@ import math
 
 import pytest
 
+from macro_packet.store import Observation
 from macro_packet.regimes import (
     SOFTMAX_TEMPERATURE,
     economic_regime,
     financial_regime,
     regime_impulse,
-    render_regimes,
 )
 
 
@@ -75,10 +75,19 @@ def test_regime_impulse_follows_slowdown_affinity_movement():
     assert regime_impulse(0.5, 0.2, 0.5, 0.2) == "improving"
 
 
-def test_render_regimes_is_deterministic():
-    a = render_regimes(0.3, 0.4, "improving", 0.6, 0.1, 0.05)
-    b = render_regimes(0.3, 0.4, "improving", 0.6, 0.1, 0.05)
+def test_regime_output_renders_deterministically_via_state():
+    """The full affinity map lives in `macro-packet state`; packet shows the
+    primary affinity only. Rendering goes through engine.render_state."""
+    from macro_packet.engine import analyze, render_state
+    from macro_packet.store import Store
+
+    def build(db):
+        s = Store(db)
+        s.ingest([Observation("DGS2", f"2026-{m:02d}-01", 3.5, f"2026-{m:02d}-02")
+                  for m in range(1, 9)])
+        return render_state(analyze(s, "2026-08-25"))
+
+    a, b = build(":memory:"), build(":memory:")
     assert a.encode() == b.encode()
-    assert "econ: reflation" in a
-    assert "financial: restrictive_orderly" in a
+    assert "econ_affinity:" in a
     assert "probability" not in a.lower()

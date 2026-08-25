@@ -129,16 +129,17 @@ class Store:
                 (evaluated_at, 1 if material else 0, "\n".join(reasons)),
             )
 
-    def save_contributions(self, as_of, readings):
-        """Record per-indicator contributions for an as-of boundary (replace)."""
+    def save_contributions(self, as_of, rows):
+        """Record per-indicator contributions for an as-of boundary (replace).
+
+        `rows` are (series, factor, z, weight, contribution) tuples — plain
+        values, so the storage layer stays ignorant of engine types.
+        """
         with self._conn:
             self._conn.execute("DELETE FROM contributions WHERE asof = ?", (as_of,))
             self._conn.executemany(
                 "INSERT INTO contributions VALUES (?, ?, ?, ?, ?, ?)",
-                [
-                    (as_of, r.series, r.factor, r.z, r.weight, r.contribution)
-                    for r in readings
-                ],
+                [(as_of, *row) for row in rows],
             )
 
     def contributions_as_of(self, as_of):

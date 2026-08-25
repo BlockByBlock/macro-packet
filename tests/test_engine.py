@@ -7,12 +7,9 @@ import datetime
 
 import pytest
 
-from macro_packet.engine import compute_state, factor_states, indicator_readings, render_state
+from macro_packet.engine import analyze, indicator_readings, render_state
 from macro_packet.specs import INDICATORS
 from macro_packet.store import Observation, Store
-
-AS_OF = "2026-08-25"
-WEEKS = 56  # weekly span 2025-08 .. 2026-08 so the last release is fresh at AS_OF
 
 
 def _weekly(series, start, weeks, value_fn, release_lag_days=4):
@@ -37,11 +34,14 @@ def _monthly(series, months, value_fn, start=datetime.date(2025, 7, 1), release_
     return obs
 
 
+AS_OF = "2026-08-25"
+
+
 @pytest.fixture
 def store(tmp_path):
     s = Store(tmp_path / "engine.db")
     # Growth: benign claims, steadily rising payrolls, steady unemployment
-    s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), WEEKS, lambda i: 220_000))
+    s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), 52, lambda i: 220_000))
     s.ingest(_monthly("PAYEMS", 14, lambda i: 150_000 + 20 * i))
     s.ingest(_monthly("UNRATE", 14, lambda i: 4.2))
     return s
@@ -49,8 +49,8 @@ def store(tmp_path):
 
 def test_polarity_rising_claims_lowers_growth(tmp_path):
     s = Store(tmp_path / "polarity.db")
-    s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), WEEKS,
-                     lambda i: 300_000 if i == WEEKS - 1 else 220_000))
+    s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), 56,
+                     lambda i: 300_000 if i == 55 else 220_000))
     spec, z = indicator_readings(s, INDICATORS, AS_OF)["ICSA"]
     assert spec.polarity == -1
     assert z < 0  # claims spiked above their window -> negative Growth reading
@@ -59,14 +59,14 @@ def test_polarity_rising_claims_lowers_growth(tmp_path):
 def test_polarity_rising_yields_raise_rates_pressure():
     s = Store(":memory:")
     # daily-ish yields: flat at 3.5, jump to 4.5 at the boundary
-    s.ingest(_weekly("DGS2", datetime.date(2025, 8, 1), WEEKS,
-                     lambda i: 4.5 if i == WEEKS - 1 else 3.5))
+    s.ingest(_weekly("DGS2", datetime.date(2025, 8, 1), 56,
+                     lambda i: 4.5 if i == 55 else 3.5))
     _, z = indicator_readings(s, INDICATORS, AS_OF)["DGS2"]
     assert z > 0  # yield jumped above its window -> positive Rates Pressure
 
 
 def test_contributions_sum_to_factor_state(store):
-    states = factor_states(store, AS_OF)
+    factors = analyze(store, AS_OF).factors
     # auditable down to inputs: each factor's state equals the sum of its
     # renormalized clamped-z contributions
     readings = indicator_readings(store, INDICATORS, AS_OF)
@@ -76,8 +76,12 @@ def test_contributions_sum_to_factor_state(store):
     for factor, members in by_factor.items():
         wsum = sum(w for w, _ in members)
         expected = round(sum(w / wsum * max(-3.0, min(3.0, z)) for w, z in members), 6)
-        assert abs(states[factor].state - expected) < 1e-6
+        assert abs(factors[factor].state - expected) < 1e-6
     assert set(by_factor) == {"G"}  # only Growth was seeded
+    # individual contributions are carried on the factor itself
+    assert {c.series for c in factors["G"].contributions} == {
+        spec.series for spec, _ in readings.values()
+    }
 
 
 def test_missing_indicator_renormalizes_with_visible_confidence(tmp_path):
@@ -85,7 +89,7 @@ def test_missing_indicator_renormalizes_with_visible_confidence(tmp_path):
     s.ingest(_monthly("PAYEMS", 14, lambda i: 150_000))
     s.ingest(_monthly("UNRATE", 14, lambda i: 4.2))
     # ICSA absent entirely
-    g = factor_states(s, AS_OF)["G"]
+    g = analyze(s, AS_OF).factors["G"]
     assert g.missing == ("ICSA",)
     assert g.confidence == pytest.approx(0.60)  # (0.35 + 0.25) / 1.00
     # contributions still sum to state despite renormalization
@@ -113,8 +117,8 @@ def test_point_in_time_calculation_never_sees_later_releases():
         ("2026-06-01", 4.0), ("2026-07-01", 4.0),
     ]
     # The engine's factor math uses exactly those vintages.
-    early = factor_states(s, "2026-08-20")
-    late = factor_states(s, "2026-09-10")
+    early = analyze(s, "2026-08-20").factors
+    late = analyze(s, "2026-09-10").factors
     assert early["G"].missing == ("ICSA",) and late["G"].missing == ("ICSA",)
     assert early["G"].state != late["G"].state  # the revision moved the state
 
@@ -122,26 +126,26 @@ def test_point_in_time_calculation_never_sees_later_releases():
 def test_stale_indicator_is_treated_as_missing(tmp_path):
     s = Store(tmp_path / "stale.db")
     s.ingest([Observation("ICSA", "2026-01-03", 220_000, "2026-01-08")])
-    assert "ICSA" in factor_states(s, AS_OF)["G"].missing
+    assert "ICSA" in analyze(s, AS_OF).factors["G"].missing
 
 
 def test_flat_indicator_carries_zero_signal_not_missing(tmp_path):
     s = Store(tmp_path / "flat.db")
-    s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), WEEKS, lambda i: 220_000))
-    readings = indicator_readings(s, INDICATORS, AS_OF)
-    _, z = readings["ICSA"]
+    s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), 56, lambda i: 220_000))
+    _, z = indicator_readings(s, INDICATORS, AS_OF)["ICSA"]
     assert z == 0.0
 
 
-def test_render_state_is_deterministic_bytes():
+def test_render_state_includes_factors_and_regimes_deterministically():
     def build(db):
         s = Store(db)
-        s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), WEEKS, lambda i: 220_000))
+        s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), 56, lambda i: 220_000))
         s.ingest(_monthly("PAYEMS", 14, lambda i: 150_000 + 20 * i))
         s.ingest(_monthly("UNRATE", 14, lambda i: 4.2))
-        return render_state(compute_state(s, AS_OF))
+        return render_state(analyze(s, AS_OF))
 
     a = build(":memory:")
     b = build(":memory:")
     assert a.encode() == b.encode()
     assert "asof: 2026-08-25\n" in a
+    assert "econ: " in a and "financial: " in a and "econ_affinity:" in a

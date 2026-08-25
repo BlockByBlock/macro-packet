@@ -16,28 +16,39 @@ SHOCK_TRIGGER = 1.5            # indicator standardized shock that counts as a s
 STRESS_JUMP_THRESHOLD = 0.5    # stress-state jump that counts as material
 
 
-def snapshot_payload(packet):
-    """The comparable core of a packet, JSON-serializable and deterministic."""
-    return json.dumps({
-        "as_of": packet["as_of"],
+def packet_core(packet):
+    """The comparable core of a packet: a plain dict of the material bits.
+
+    This is the single shape both persistence and comparison use; callers
+    persist `dump_core(packet)` and compare cores directly.
+    """
+    return {
         "econ": packet["econ"],
         "financial": packet["financial"],
-        "econ_impulse": packet["econ_impulse"],
         "impulses": dict(packet["impulses"]),
         "states": {k: v.state for k, v in packet["factors"].items()},
         "stress": packet["factors"]["S"].state,
         "drivers": [{"series": d.series, "shock": d.shock} for d in packet["drivers"]],
         "contra": [c.series for c in packet["contra"]],
-    }, sort_keys=True)
+    }
+
+
+def dump_core(packet):
+    """Deterministic JSON serialization of a packet core, for storage."""
+    return json.dumps(packet_core(packet), sort_keys=True)
 
 
 def evaluate(current, previous):
-    """Return the list of material-change reasons; empty means suppress."""
+    """Return the list of material-change reasons; empty means suppress.
+
+    `current` is a live packet; `previous` is {"as_of", "payload"} from the
+    store. Only the stored payload crosses JSON.
+    """
     if previous is None:
         return ["no previous snapshot recorded"]
 
     before = json.loads(previous["payload"])
-    after = json.loads(snapshot_payload(current))
+    after = packet_core(current)
     reasons = []
 
     if before["econ"] != after["econ"]:

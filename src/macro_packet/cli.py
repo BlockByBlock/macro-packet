@@ -2,13 +2,14 @@
 
 import argparse
 import datetime
+import json
 import sys
 from pathlib import Path
 
-from macro_packet.engine import compute_state, render_state
+from macro_packet.engine import analyze, render_state
 from macro_packet.fred import SERIES, fetch_series
 from macro_packet.materiality import agent_prompt as render_agent_prompt
-from macro_packet.materiality import evaluate, snapshot_payload
+from macro_packet.materiality import dump_core, evaluate
 from macro_packet.packet import build_packet, render_packet
 from macro_packet.store import Store
 
@@ -38,84 +39,93 @@ def run_update(db_path, fetcher):
     return {"series": len(SERIES), "inserted": inserted}
 
 
-def _default_as_of():
-    return datetime.date.today().isoformat()
+def _as_of(args):
+    return args.as_of or datetime.date.today().isoformat()
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(prog="macro-packet")
-    sub = parser.add_subparsers(dest="command", required=True)
+def cmd_update(args):
+    api_key = load_env().get("FRED_APIKEY")
+    if not api_key:
+        raise SystemExit("FRED_APIKEY not found in .env; copy .env.example and fill it in.")
+    summary = run_update(args.db, lambda sid: fetch_series(sid, api_key))
+    print(f"ingested {summary['inserted']} new observations across {summary['series']} series")
+    return 0
 
-    p_update = sub.add_parser("update", help="fetch all series into the local store")
-    p_update.add_argument("--db", type=Path, default=DEFAULT_DB)
 
-    p_state = sub.add_parser("state", help="print the five factors as YAML")
-    p_state.add_argument("--db", type=Path, default=DEFAULT_DB)
-    p_state.add_argument("--as-of", default=None)
+def cmd_state(args):
+    print(render_state(analyze(Store(args.db), _as_of(args))), end="")
+    return 0
 
-    p_packet = sub.add_parser("packet", help="print the compact state packet")
-    p_packet.add_argument("--db", type=Path, default=DEFAULT_DB)
-    p_packet.add_argument("--as-of", default=None)
 
-    p_gate = sub.add_parser(
-        "should-query-agent", help="decide whether an agent call is justified")
-    p_gate.add_argument("--db", type=Path, default=DEFAULT_DB)
-    p_gate.add_argument("--as-of", default=None)
-
-    p_prompt = sub.add_parser("agent-prompt", help="print a targeted agent prompt")
-    p_prompt.add_argument("--db", type=Path, default=DEFAULT_DB)
-    p_prompt.add_argument("--as-of", default=None)
-
-    args = parser.parse_args(argv)
-
-    if args.command == "update":
-        api_key = load_env().get("FRED_APIKEY")
-        if not api_key:
-            raise SystemExit("FRED_APIKEY not found in .env; copy .env.example and fill it in.")
-        summary = run_update(args.db, lambda sid: fetch_series(sid, api_key))
-        print(f"ingested {summary['inserted']} new observations across {summary['series']} series")
-        return 0
-
-    as_of = args.as_of or _default_as_of()
-    store = Store(args.db)
-
-    if args.command == "state":
-        print(render_state(compute_state(store, as_of)), end="")
-        return 0
-
+def cmd_packet(args):
+    store, as_of = Store(args.db), _as_of(args)
     packet = build_packet(store, as_of)
+    print(render_packet(packet), end="")
+    store.save_snapshot(as_of, dump_core(packet))
+    store.save_contributions(
+        as_of,
+        [(r.series, r.factor, r.z, r.weight, r.contribution)
+         for f in packet["factors"].values() for r in f.contributions],
+    )
+    return 0
 
-    if args.command == "packet":
-        print(render_packet(packet), end="")
-        store.save_snapshot(as_of, snapshot_payload(packet))
-        store.save_contributions(
-            as_of,
-            [c for f in packet["factors"].values() for c in f.contributions],
-        )
-        return 0
 
-    previous = store.latest_snapshot_before(as_of)
+def _gate_reasons(store, args):
+    """Shared gate evaluation for should-query-agent / agent-prompt."""
+    packet = build_packet(store, _as_of(args))
+    previous = store.latest_snapshot_before(_as_of(args))
     reasons = evaluate(packet, previous)
-    material = bool(reasons)
-    store.record_gate(material, reasons)
+    store.record_gate(bool(reasons), reasons)
+    return packet, previous, reasons
 
-    if args.command == "should-query-agent":
-        if not material:
-            print(f"false — no material change since "
-                  f"{previous['as_of'] if previous else '(never)'}; no agent call")
-        else:
-            print("true")
-            for reason in reasons:
-                print(f"  - {reason}")
-        return 0
 
-    # agent-prompt
-    if not material:
+def cmd_should_query_agent(args):
+    _, previous, reasons = _gate_reasons(Store(args.db), args)
+    if not reasons:
+        since = previous["as_of"] if previous else "(never)"
+        print(f"false — no material change since {since}; no agent call")
+    else:
+        print("true")
+        for reason in reasons:
+            print(f"  - {reason}")
+    return 0
+
+
+def cmd_agent_prompt(args):
+    packet, previous, reasons = _gate_reasons(Store(args.db), args)
+    if not reasons:
         print(f"no material change since {previous['as_of']}; agent call suppressed.",
               file=sys.stderr)
         return 1
     print(render_agent_prompt(packet, reasons))
     return 0
+
+
+_COMMON = argparse.ArgumentParser(add_help=False)
+_COMMON.add_argument("--db", type=Path, default=DEFAULT_DB)
+_DATED = argparse.ArgumentParser(add_help=False, parents=[_COMMON])
+_DATED.add_argument("--as-of", default=None)
+
+COMMANDS = {
+    "update": ("fetch all series into the local store", _COMMON, cmd_update),
+    "state": ("print the five factors and regimes as YAML", _DATED, cmd_state),
+    "packet": ("print the compact state packet", _DATED, cmd_packet),
+    "should-query-agent": ("decide whether an agent call is justified", _DATED,
+                           cmd_should_query_agent),
+    "agent-prompt": ("print a targeted agent prompt", _DATED, cmd_agent_prompt),
+}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="macro-packet")
+    sub = parser.add_subparsers(dest="command", required=True)
+    handlers = {}
+    for name, (help_text, parent, handler) in COMMANDS.items():
+        sub.add_parser(name, help=help_text, parents=[parent])
+        handlers[name] = handler
+
+    args = parser.parse_args(argv)
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":
