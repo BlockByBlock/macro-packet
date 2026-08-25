@@ -6,7 +6,7 @@ This is the acceptance gate for the whole slice-1 effort: if this command's outp
 
 **Blocked by:** 03 — Economic + financial regimes; 04 — Drivers + contradictions.
 
-**Status:** ready-for-agent
+**Status:** done (slice 1 shipped)
 
 - [x] Packet matches the §33 target shape (asof, econ, financial, G/I/R/L/S lines, drivers, contra)
 - [x] Routine packet stays within ~300 tokens on real data (rough token estimate, not tokenizer CI)

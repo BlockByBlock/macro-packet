@@ -6,7 +6,7 @@ Thresholds start as explicit config placeholders to be tuned from observed behav
 
 **Blocked by:** 04 — Drivers + contradictions.
 
-**Status:** ready-for-agent
+**Status:** done (slice 1 shipped)
 
 - [x] Insignificant update sequence (e.g. growth −0.31 → −0.32) suppresses the agent call
 - [x] Material sequence (e.g. WTI shock + inflation jump) triggers it, with reasons recorded

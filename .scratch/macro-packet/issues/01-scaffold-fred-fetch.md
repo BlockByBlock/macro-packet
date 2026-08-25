@@ -8,7 +8,7 @@ Respect: FRED-only providers (ADR-0001), append-only vintage store from day one 
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done (slice 1 shipped)
 
 - [x] `macro-packet update` populates the SQLite store with all 12 series
 - [x] Economic series rows carry release timestamps from FRED vintage parameters; re-running appends without duplication

@@ -8,7 +8,7 @@ Respect: clamped z-score contributions and renormalization policy (ADR-0004), CO
 
 **Blocked by:** 01 — Scaffold + FRED fetch into point-in-time store.
 
-**Status:** ready-for-agent
+**Status:** done (slice 1 shipped)
 
 - [x] Indicator specs are config-driven, not hard-coded into factor logic
 - [x] Polarity is respected: rising claims lowers Growth, rising yields raise Rates Pressure

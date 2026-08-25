@@ -6,7 +6,7 @@ Respect: glossary definitions of economic regime, financial regime, and affinity
 
 **Blocked by:** 02 — Indicator specs → five factor states.
 
-**Status:** ready-for-agent
+**Status:** done (slice 1 shipped)
 
 - [x] Quadrant classification matches expected labels at clear-cut factor readings
 - [x] Affinities are continuous: near a quadrant border, two regimes have comparable affinity

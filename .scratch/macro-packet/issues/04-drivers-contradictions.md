@@ -6,7 +6,7 @@ Respect: glossary definitions of driver and contradiction including their caps; 
 
 **Blocked by:** 02 — Indicator specs → five factor states.
 
-**Status:** ready-for-agent
+**Status:** done (slice 1 shipped)
 
 - [x] Driver list capped at 5, ranked by the documented formula
 - [x] Contradiction list capped at 3, showing genuine cross-signal disagreement (e.g. growth down but claims benign)
