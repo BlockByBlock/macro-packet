@@ -5,6 +5,7 @@ import datetime
 import sys
 from pathlib import Path
 
+from macro_packet.engine import compute_state, render_state
 from macro_packet.fred import SERIES, fetch_series
 from macro_packet.materiality import agent_prompt as render_agent_prompt
 from macro_packet.materiality import evaluate, snapshot_payload
@@ -79,7 +80,6 @@ def main(argv=None):
     store = Store(args.db)
 
     if args.command == "state":
-        from macro_packet.engine import compute_state, render_state
         print(render_state(compute_state(store, as_of)), end="")
         return 0
 
@@ -88,6 +88,10 @@ def main(argv=None):
     if args.command == "packet":
         print(render_packet(packet), end="")
         store.save_snapshot(as_of, snapshot_payload(packet))
+        store.save_contributions(
+            as_of,
+            [c for f in packet["factors"].values() for c in f.contributions],
+        )
         return 0
 
     previous = store.latest_snapshot_before(as_of)

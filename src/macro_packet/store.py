@@ -28,6 +28,15 @@ CREATE TABLE IF NOT EXISTS gate_log (
     material      INTEGER NOT NULL,
     reasons       TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS contributions (
+    asof         TEXT NOT NULL,
+    series       TEXT NOT NULL,
+    factor       TEXT NOT NULL,
+    z            REAL NOT NULL,
+    weight       REAL NOT NULL,
+    contribution REAL NOT NULL,
+    PRIMARY KEY (asof, series)
+);
 """
 
 
@@ -119,3 +128,23 @@ class Store:
                 "INSERT INTO gate_log (evaluated_at, material, reasons) VALUES (?, ?, ?)",
                 (evaluated_at, 1 if material else 0, "\n".join(reasons)),
             )
+
+    def save_contributions(self, as_of, readings):
+        """Record per-indicator contributions for an as-of boundary (replace)."""
+        with self._conn:
+            self._conn.execute("DELETE FROM contributions WHERE asof = ?", (as_of,))
+            self._conn.executemany(
+                "INSERT INTO contributions VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    (as_of, r.series, r.factor, r.z, r.weight, r.contribution)
+                    for r in readings
+                ],
+            )
+
+    def contributions_as_of(self, as_of):
+        """Stored per-indicator contributions at a boundary, ordered by factor/series."""
+        return self._conn.execute(
+            "SELECT series, factor, z, weight, contribution FROM contributions"
+            " WHERE asof = ? ORDER BY factor, series",
+            (as_of,),
+        ).fetchall()

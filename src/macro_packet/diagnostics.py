@@ -5,12 +5,10 @@ declarative specs — no new data. Weights stay hand-set guesses (deferred
 calibration), so importance inherits that arbitrariness by design.
 """
 
-import datetime
-
 from dataclasses import dataclass
 
-from macro_packet.engine import _date, indicator_readings
-from macro_packet.specs import INDICATORS, IMPULSE_LOOKBACK_DAYS
+from macro_packet.engine import factor_states, indicator_readings, lookback_boundary
+from macro_packet.specs import INDICATORS
 
 DRIVER_CAP = 5
 CONTRADICTION_CAP = 3
@@ -18,6 +16,8 @@ CONTRADICTION_CAP = 3
 DRIVER_SHOCK_FLOOR = 0.25
 # A factor this weak has no direction for an indicator to contradict.
 CONTRADICTION_STATE_FLOOR = 0.25
+# An indicator z at least this far against its factor's sign is a real conflict.
+CONTRADICTION_Z_FLOOR = 0.25
 
 
 @dataclass(frozen=True)
@@ -39,8 +39,7 @@ def drivers(store, as_of, specs=INDICATORS):
     Ranked by |standardized shock| x hand-set factor weight.
     """
     now = indicator_readings(store, specs, as_of)
-    then_date = _date(as_of) - datetime.timedelta(days=IMPULSE_LOOKBACK_DAYS)
-    before = indicator_readings(store, specs, then_date.isoformat())
+    before = indicator_readings(store, specs, lookback_boundary(as_of))
 
     ranked = []
     for spec, z_now in now.values():
@@ -55,8 +54,6 @@ def drivers(store, as_of, specs=INDICATORS):
 
 def contradictions(store, as_of, specs=INDICATORS):
     """Indicators disagreeing with their own factor's direction, capped at 3."""
-    from macro_packet.engine import factor_states
-
     readings = indicator_readings(store, specs, as_of)
     states = factor_states(store, as_of, specs)
 
@@ -65,10 +62,9 @@ def contradictions(store, as_of, specs=INDICATORS):
         direction = states[spec.factor].state
         if abs(direction) < CONTRADICTION_STATE_FLOOR:
             continue
-        # Opposing signs with real magnitude on both sides = genuine disagreement.
-        if direction < 0 and z > DRIVER_SHOCK_FLOOR:
+        if direction < 0 and z > CONTRADICTION_Z_FLOOR:
             strength = z * spec.weight
-        elif direction > 0 and z < -DRIVER_SHOCK_FLOOR:
+        elif direction > 0 and z < -CONTRADICTION_Z_FLOOR:
             strength = -z * spec.weight
         else:
             continue

@@ -35,15 +35,22 @@ class FactorState:
     state: float       # sum of contributions
     confidence: float  # available weight / total hand-set weight
     missing: tuple     # series treated as unavailable at this boundary
+    contributions: tuple = ()  # individual Readings: auditable down to inputs
+
+
+def parse_date(iso):
+    """Parse an ISO date/datetime string (public: shared across modules)."""
+    return datetime.date.fromisoformat(iso[:10])
+
+
+def lookback_boundary(as_of):
+    """The earlier boundary one impulse-lookback before `as_of`."""
+    return (parse_date(as_of) - datetime.timedelta(days=IMPULSE_LOOKBACK_DAYS)).isoformat()
 
 
 def _within_window(periods, as_of_date, years):
     start = as_of_date - datetime.timedelta(days=round(365.25 * years))
-    return [(p, v) for p, v in periods if start <= _date(p) <= as_of_date]
-
-
-def _date(iso):
-    return datetime.date.fromisoformat(iso[:10])
+    return [(p, v) for p, v in periods if start <= parse_date(p) <= as_of_date]
 
 
 def indicator_readings(store, specs, as_of):
@@ -52,14 +59,14 @@ def indicator_readings(store, specs, as_of):
     Missing indicators (no data, stale beyond freshness) are simply absent;
     callers renormalize from what is present.
     """
-    as_of_date = _date(as_of)
+    as_of_date = parse_date(as_of)
     readings = {}
     for spec in specs:
         rows = store.known_as_of(spec.series, as_of)
         if not rows:
             continue
         latest = max(rows, key=lambda r: r.observation_period)
-        if (as_of_date - _date(latest.release_timestamp)).days > spec.freshness_days:
+        if (as_of_date - parse_date(latest.release_timestamp)).days > spec.freshness_days:
             continue
         periods = [(r.observation_period, r.value) for r in rows]
         window = _within_window(periods, as_of_date, spec.window_years)
@@ -102,6 +109,7 @@ def factor_states(store, as_of, specs=INDICATORS):
             state=round(sum(c.contribution for c in contributions), 6),
             confidence=round(available_weight / total_weight, 2) if total_weight else 0.0,
             missing=missing,
+            contributions=tuple(contributions),
         )
     return states
 
@@ -113,8 +121,7 @@ def compute_state(store, as_of, specs=INDICATORS):
     against the same calculation one lookback earlier, classified up/down/flat.
     """
     now = factor_states(store, as_of, specs)
-    then_date = _date(as_of) - datetime.timedelta(days=IMPULSE_LOOKBACK_DAYS)
-    before = factor_states(store, then_date.isoformat(), specs)
+    before = factor_states(store, lookback_boundary(as_of), specs)
 
     impulses = {}
     for factor, fs in now.items():
@@ -123,12 +130,12 @@ def compute_state(store, as_of, specs=INDICATORS):
             impulses[factor] = "flat"
         else:
             impulses[factor] = "up" if delta > 0 else "down"
-    return {"as_of": as_of, "factors": now, "impulses": impulses}
+    return {"as_of": as_of, "factors": now, "impulses": impulses, "before": before}
 
 
 def render_state(snapshot):
     """Deterministic YAML rendering of a state snapshot."""
-    lines = [f"asof: {_d(snapshot['as_of'])}"]
+    lines = [f"asof: {parse_date(snapshot['as_of']).isoformat()}"]
     for factor in FACTORS:
         fs = snapshot["factors"][factor]
         lines.append(f"{factor}: [{_num(fs.state)}, {snapshot['impulses'][factor]}, {_conf(fs.confidence)}]")
@@ -138,10 +145,6 @@ def render_state(snapshot):
         for series in missing:
             lines.append(f"  - {series}")
     return "\n".join(lines) + "\n"
-
-
-def _d(as_of):
-    return _date(as_of).isoformat()
 
 
 def _num(x):

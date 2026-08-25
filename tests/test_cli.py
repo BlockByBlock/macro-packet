@@ -77,13 +77,13 @@ def test_gate_suppresses_on_insignificant_then_fires_on_shock(tmp_path, capsys):
     assert main(["should-query-agent", "--db", str(db), "--as-of", later]) == 0
     assert capsys.readouterr().out.startswith("false")
 
-    # a fresh shock arrives (new vintage appended) -> gate fires with reasons
+    # a fresh oil shock arrives (new vintage appended) -> gate must fire
     from macro_packet.store import Observation
     Store(db).ingest([Observation("DCOILWTICO", "2026-08-25", 120.0, "2026-08-26")])
-    code = main(["should-query-agent", "--db", str(db), "--as-of", later])
+    assert main(["should-query-agent", "--db", str(db), "--as-of", later]) == 0
     out = capsys.readouterr().out
-    if out.startswith("true"):
-        assert code == 0
+    assert out.startswith("true")
+    assert "shock: DCOILWTICO" in out
 
 
 def test_agent_prompt_refuses_when_gate_suppresses(tmp_path, capsys):
@@ -106,8 +106,28 @@ def test_agent_prompt_prints_targeted_prompt_after_material_change(tmp_path, cap
     capsys.readouterr()
     from macro_packet.store import Observation
     Store(db).ingest([Observation("DCOILWTICO", "2026-08-25", 130.0, "2026-08-26")])
-    code = main(["agent-prompt", "--db", str(db), "--as-of", "2026-09-01"])
+    assert main(["agent-prompt", "--db", str(db), "--as-of", "2026-09-01"]) == 0
     out = capsys.readouterr().out
-    if "Deterministic macro state:" in out:
-        assert code == 0
-        assert "Try to falsify" in out
+    assert "Deterministic macro state:" in out
+    assert "Try to falsify" in out
+
+
+def test_packet_command_stores_contributions_individually(tmp_path):
+    """Spec story 10: contributions retrievable, auditable down to inputs."""
+    from collections import defaultdict
+
+    from conftest import AS_OF
+    from macro_packet.engine import compute_state
+
+    db = tmp_path / "c.db"
+    _seed_full_store(db)
+    assert main(["packet", "--db", str(db), "--as-of", AS_OF]) == 0
+
+    rows = Store(db).contributions_as_of(AS_OF)
+    assert rows, "no contributions persisted"
+    sums = defaultdict(float)
+    for _series, factor, _z, _weight, contribution in rows:
+        sums[factor] += contribution
+    states = compute_state(Store(db), AS_OF)["factors"]
+    for factor, total in sums.items():
+        assert abs(total - states[factor].state) < 1e-6

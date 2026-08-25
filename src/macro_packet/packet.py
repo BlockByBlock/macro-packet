@@ -6,12 +6,10 @@ compact YAML matching the source plan's §33 milestone shape. Byte-for-byte
 deterministic given the same store and code.
 """
 
-import datetime
-
 from macro_packet.diagnostics import Driver, Contradiction, drivers, contradictions
-from macro_packet.engine import _date, compute_state, factor_states
+from macro_packet.engine import parse_date, compute_state
 from macro_packet.regimes import economic_regime, financial_regime, regime_impulse
-from macro_packet.specs import FACTORS, INDICATORS, IMPULSE_LOOKBACK_DAYS
+from macro_packet.specs import FACTORS, INDICATORS
 
 # Factor-specific impulse vocabulary: same numbers, factor-native wording.
 IMPULSE_WORDS = {
@@ -30,9 +28,7 @@ def build_packet(store, as_of, specs=INDICATORS):
     snap = compute_state(store, as_of, specs)
     f = snap["factors"]
     imp = snap["impulses"]
-
-    then_date = _date(as_of) - datetime.timedelta(days=IMPULSE_LOOKBACK_DAYS)
-    before = factor_states(store, then_date.isoformat(), specs)
+    before = snap["before"]
 
     affinities, primary = economic_regime(f["G"].state, f["I"].state)
     econ_impulse = regime_impulse(
@@ -65,7 +61,7 @@ def _confirmation(econ_impulse, stress_state):
 
 def render_packet(p):
     """Deterministic compact YAML targeting ~150-300 tokens."""
-    lines = [f"asof: {_date(p['as_of']).isoformat()}"]
+    lines = [f"asof: {parse_date(p['as_of']).isoformat()}"]
     lines.append(f"econ: {p['econ']}")
     lines.append(f"econ_affinity: {p['econ_affinity']:.2f}")
     lines.append(f"econ_impulse: {p['econ_impulse']}")
