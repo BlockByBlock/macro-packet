@@ -6,10 +6,29 @@ compact YAML matching the source plan's §33 milestone shape. Byte-for-byte
 deterministic given the same store and code.
 """
 
-from macro_packet.diagnostics import contradictions, drivers
-from macro_packet.engine import analyze, fmt_conf, fmt_signed, parse_date
+from dataclasses import dataclass
+
+from macro_packet.diagnostics import Contradiction, Driver, contradictions, drivers
+from macro_packet.engine import Analysis, analyze, fmt_conf, fmt_signed, parse_date
 from macro_packet.regimes import economic_regime, financial_regime, regime_impulse
 from macro_packet.specs import FACTORS, INDICATORS
+
+
+@dataclass(frozen=True)
+class Packet:
+    """Everything the state packet says, computed at one as-of boundary."""
+
+    as_of: str
+    factors: dict          # factor -> FactorState
+    impulses: dict         # factor -> up/down/flat
+    econ: str              # primary economic regime label
+    econ_affinity: float   # affinity of the primary label
+    econ_impulse: str      # deteriorating/improving
+    financial: str         # descriptive financial regime
+    drivers: list          # list[Driver]
+    contra: list           # list[Contradiction]
+    confirm: str           # stress confirms/diverges
+
 
 # Factor-specific impulse wording overrides; factors not listed use the
 # plain up/down/flat vocabulary.
@@ -23,27 +42,27 @@ def impulse_word(factor, impulse):
     return IMPULSE_WORD_OVERRIDES.get(factor, {}).get(impulse, impulse)
 
 
-def build_packet(store, as_of, specs=INDICATORS):
+def build_packet(store, as_of, specs=INDICATORS) -> Packet:
     """Compute every packet ingredient at an explicit as-of boundary."""
-    a = analyze(store, as_of, specs)
-    f, b = a.factors, a.before_factors
+    analysis = analyze(store, as_of, specs)
+    f, b = analysis.factors, analysis.before_factors
 
     affinities, primary = economic_regime(f["G"].state, f["I"].state)
     econ_impulse = regime_impulse(
         f["G"].state, f["I"].state, b["G"].state, b["I"].state
     )
-    return {
-        "as_of": a.as_of,
-        "factors": f,
-        "impulses": a.impulses,
-        "econ": primary,
-        "econ_affinity": round(affinities[primary], 2),
-        "econ_impulse": econ_impulse,
-        "financial": financial_regime(f["R"].state, f["L"].state, f["S"].state),
-        "drivers": drivers(a.readings, a.before_readings, specs),
-        "contra": contradictions(a.readings, f, specs),
-        "confirm": _confirmation(econ_impulse, f["S"].state),
-    }
+    return Packet(
+        as_of=analysis.as_of,
+        factors=f,
+        impulses=analysis.impulses,
+        econ=primary,
+        econ_affinity=round(affinities[primary], 2),
+        econ_impulse=econ_impulse,
+        financial=financial_regime(f["R"].state, f["L"].state, f["S"].state),
+        drivers=drivers(analysis.readings, analysis.before_readings),
+        contra=contradictions(analysis.readings, f),
+        confirm=_confirmation(econ_impulse, f["S"].state),
+    )
 
 
 def _confirmation(econ_impulse, stress_state):
@@ -55,19 +74,19 @@ def _confirmation(econ_impulse, stress_state):
     return "stress confirms" if stress_confirms else "stress diverges"
 
 
-def render_packet(p):
+def render_packet(packet: Packet):
     """Deterministic compact YAML targeting ~150-300 tokens."""
-    lines = [f"asof: {parse_date(p['as_of']).isoformat()}"]
-    lines.append(f"econ: {p['econ']}")
-    lines.append(f"econ_affinity: {p['econ_affinity']:.2f}")
-    lines.append(f"econ_impulse: {p['econ_impulse']}")
-    lines.append(f"financial: {p['financial']}")
+    lines = [f"asof: {parse_date(packet.as_of).isoformat()}"]
+    lines.append(f"econ: {packet.econ}")
+    lines.append(f"econ_affinity: {packet.econ_affinity:.2f}")
+    lines.append(f"econ_impulse: {packet.econ_impulse}")
+    lines.append(f"financial: {packet.financial}")
     for factor in FACTORS:
-        fs = p["factors"][factor]
-        word = impulse_word(factor, p["impulses"][factor])
+        fs = packet.factors[factor]
+        word = impulse_word(factor, packet.impulses[factor])
         lines.append(f"{factor}: [{fmt_signed(fs.state)}, {word}, {fmt_conf(fs.confidence)}]")
-    lines.append(f"confirm: {p['confirm']}")
-    for section, items in (("drivers", p["drivers"]), ("contra", p["contra"])):
+    lines.append(f"confirm: {packet.confirm}")
+    for section, items in (("drivers", packet.drivers), ("contra", packet.contra)):
         lines.append(f"{section}: []" if not items else f"{section}:")
         if section == "drivers":
             lines.extend(f"  - {d.series} {d.shock:+.1f}z" for d in items)

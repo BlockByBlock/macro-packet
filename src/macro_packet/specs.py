@@ -35,7 +35,3 @@ INDICATORS = (
     IndicatorSpec("NFCI",      "S", +1, 0.55, 5.0, 10),
     IndicatorSpec("VIXCLS",    "S", +1, 0.45, 3.0, 7),
 )
-
-Z_CLAMP = 3.0            # default clamping (ADR-0003)
-IMPULSE_LOOKBACK_DAYS = 63   # ~ one quarter
-FLAT_THRESHOLD = 0.05        # |state change| below this renders impulse flat

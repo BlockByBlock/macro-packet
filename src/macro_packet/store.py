@@ -101,8 +101,13 @@ class Store:
             )
         ]
 
-    def save_snapshot(self, as_of, payload):
-        """Record the packet payload produced at an as-of boundary (upsert)."""
+    def record_packet(self, as_of, payload, contribution_rows):
+        """Atomically record a packet run: snapshot plus its contributions.
+
+        `contribution_rows` are (series, factor, z, weight, contribution)
+        tuples — plain values, so the storage layer stays ignorant of
+        engine types.
+        """
         created_at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -110,6 +115,11 @@ class Store:
                 " ON CONFLICT(asof) DO UPDATE SET payload=excluded.payload,"
                 " created_at=excluded.created_at",
                 (as_of, payload, created_at),
+            )
+            self._conn.execute("DELETE FROM contributions WHERE asof = ?", (as_of,))
+            self._conn.executemany(
+                "INSERT INTO contributions VALUES (?, ?, ?, ?, ?, ?)",
+                [(as_of, *row) for row in contribution_rows],
             )
 
     def latest_snapshot_before(self, as_of):
@@ -127,19 +137,6 @@ class Store:
             self._conn.execute(
                 "INSERT INTO gate_log (evaluated_at, material, reasons) VALUES (?, ?, ?)",
                 (evaluated_at, 1 if material else 0, "\n".join(reasons)),
-            )
-
-    def save_contributions(self, as_of, rows):
-        """Record per-indicator contributions for an as-of boundary (replace).
-
-        `rows` are (series, factor, z, weight, contribution) tuples — plain
-        values, so the storage layer stays ignorant of engine types.
-        """
-        with self._conn:
-            self._conn.execute("DELETE FROM contributions WHERE asof = ?", (as_of,))
-            self._conn.executemany(
-                "INSERT INTO contributions VALUES (?, ?, ?, ?, ?, ?)",
-                [(as_of, *row) for row in rows],
             )
 
     def contributions_as_of(self, as_of):

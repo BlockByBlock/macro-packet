@@ -13,13 +13,12 @@ import math
 from dataclasses import dataclass
 
 from macro_packet.regimes import economic_regime, financial_regime
-from macro_packet.specs import (
-    FACTORS,
-    FLAT_THRESHOLD,
-    IMPULSE_LOOKBACK_DAYS,
-    INDICATORS,
-    Z_CLAMP,
-)
+from macro_packet.specs import FACTORS, INDICATORS
+
+# Pipeline tuning (not per-indicator config).
+Z_CLAMP = 3.0              # default clamping (ADR-0003)
+IMPULSE_LOOKBACK_DAYS = 63  # ~ one quarter
+FLAT_THRESHOLD = 0.05      # |state change| below this renders impulse flat
 
 
 @dataclass(frozen=True)
@@ -112,12 +111,10 @@ def factor_states(readings, specs=INDICATORS):
     states = {}
     for factor, members in by_factor.items():
         available_weight = sum(s.weight for s, _ in members)
-        contributions = [
-            Reading(spec.series, factor, round(z, 6),
-                    round(spec.weight / available_weight, 6) if available_weight else 0.0,
-                    round(z * spec.weight / available_weight, 6) if available_weight else 0.0)
-            for spec, z in sorted(members, key=lambda m: m[0].series)
-        ]
+        contributions = []
+        for spec, z in sorted(members, key=lambda m: m[0].series):
+            w = spec.weight / available_weight if available_weight else 0.0
+            contributions.append(Reading(spec.series, factor, round(z, 6), round(w, 6), round(z * w, 6)))
         missing = tuple(sorted(
             s.series for s in specs if s.factor == factor
             and s.series not in readings
@@ -167,23 +164,23 @@ def fmt_conf(c):
     return f"{c:.2f}"
 
 
-def render_state(a):
+def render_state(analysis: Analysis):
     """Deterministic YAML rendering of an analysis: factors plus both regimes."""
-    lines = [f"asof: {parse_date(a.as_of).isoformat()}"]
+    lines = [f"asof: {parse_date(analysis.as_of).isoformat()}"]
     for factor in FACTORS:
-        fs = a.factors[factor]
+        fs = analysis.factors[factor]
         lines.append(
-            f"{factor}: [{fmt_signed(fs.state)}, {a.impulses[factor]}, {fmt_conf(fs.confidence)}]"
+            f"{factor}: [{fmt_signed(fs.state)}, {analysis.impulses[factor]}, {fmt_conf(fs.confidence)}]"
         )
-    affinities, primary = economic_regime(a.factors["G"].state, a.factors["I"].state)
+    affinities, primary = economic_regime(analysis.factors["G"].state, analysis.factors["I"].state)
     lines.append(f"econ: {primary}")
     lines.append("econ_affinity:")
     lines.extend(f"  {name}: {affinities[name]:.2f}" for name in sorted(affinities))
     lines.append(
         "financial: "
-        + financial_regime(a.factors["R"].state, a.factors["L"].state, a.factors["S"].state)
+        + financial_regime(analysis.factors["R"].state, analysis.factors["L"].state, analysis.factors["S"].state)
     )
-    missing = [s for f in FACTORS for s in a.factors[f].missing]
+    missing = [s for f in FACTORS for s in analysis.factors[f].missing]
     if missing:
         lines.append("missing:")
         lines.extend(f"  - {series}" for series in missing)

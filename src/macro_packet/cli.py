@@ -60,11 +60,11 @@ def cmd_packet(args):
     store, as_of = Store(args.db), _as_of(args)
     packet = build_packet(store, as_of)
     print(render_packet(packet), end="")
-    store.save_snapshot(as_of, dump_core(packet))
-    store.save_contributions(
+    store.record_packet(
         as_of,
+        dump_core(packet),
         [(r.series, r.factor, r.z, r.weight, r.contribution)
-         for f in packet["factors"].values() for r in f.contributions],
+         for f in packet.factors.values() for r in f.contributions],
     )
     return 0
 

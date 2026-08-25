@@ -59,15 +59,15 @@ def test_generated_prompt_names_only_actual_anomalies(tmp_path):
     db = tmp_path / "prompt.db"
     store = seed_scenario(Store(db), shocks={"DCOILWTICO": 95.0})
     packet = build_packet(store, AS_OF)
-    reasons = [f"shock: DCOILWTICO {packet['drivers'][0].shock:+.1f}z"]
+    reasons = [f"shock: DCOILWTICO {packet.drivers[0].shock:+.1f}z"]
     prompt = agent_prompt(packet, reasons)
     assert "Deterministic macro state:" in prompt
-    assert f"econ={packet['econ']}" in prompt
+    assert f"econ={packet.econ}" in prompt
     assert "Material changes:" in prompt and "DCOILWTICO" in prompt
     assert "Try to falsify the classification." in prompt
     assert "research macro conditions" not in prompt.lower()
-    names = {d.series for d in packet["drivers"]}
-    names |= {c.series for c in packet["contra"]}
+    names = {d.series for d in packet.drivers}
+    names |= {c.series for c in packet.contra}
     names |= {r.split()[1] for r in reasons}
     questions = research_questions(packet, reasons)
     assert questions

@@ -7,7 +7,6 @@ importance inherits that arbitrariness by design.
 
 from dataclasses import dataclass
 
-from macro_packet.specs import INDICATORS
 
 DRIVER_CAP = 5
 CONTRADICTION_CAP = 3
@@ -32,7 +31,7 @@ class Contradiction:
     factor: str
 
 
-def drivers(readings, before_readings, specs=INDICATORS):
+def drivers(readings, before_readings):
     """Top indicators behind recent factor movement, capped at 5.
 
     Ranked by |standardized shock| x hand-set factor weight.
@@ -49,7 +48,7 @@ def drivers(readings, before_readings, specs=INDICATORS):
     return [d for _, d in ranked[:DRIVER_CAP]]
 
 
-def contradictions(readings, factors, specs=INDICATORS):
+def contradictions(readings, factors):
     """Indicators disagreeing with their own factor's direction, capped at 3."""
     conflicts = []
     for series, (spec, z) in readings.items():

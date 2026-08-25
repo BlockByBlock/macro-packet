@@ -10,26 +10,28 @@ The agent prompt is printed for manual use only; nothing here executes an agent.
 
 import json
 
+from macro_packet.packet import Packet
+
 # --- threshold placeholders (tuned from observed behaviour, not pre-calibrated)
 FACTOR_MOVE_THRESHOLD = 0.25   # factor state change that counts as material
 SHOCK_TRIGGER = 1.5            # indicator standardized shock that counts as a shock
 STRESS_JUMP_THRESHOLD = 0.5    # stress-state jump that counts as material
 
 
-def packet_core(packet):
+def packet_core(packet: Packet):
     """The comparable core of a packet: a plain dict of the material bits.
 
     This is the single shape both persistence and comparison use; callers
     persist `dump_core(packet)` and compare cores directly.
     """
     return {
-        "econ": packet["econ"],
-        "financial": packet["financial"],
-        "impulses": dict(packet["impulses"]),
-        "states": {k: v.state for k, v in packet["factors"].items()},
-        "stress": packet["factors"]["S"].state,
-        "drivers": [{"series": d.series, "shock": d.shock} for d in packet["drivers"]],
-        "contra": [c.series for c in packet["contra"]],
+        "econ": packet.econ,
+        "financial": packet.financial,
+        "impulses": dict(packet.impulses),
+        "states": {k: v.state for k, v in packet.factors.items()},
+        "stress": packet.factors["S"].state,
+        "drivers": [{"series": d.series, "shock": d.shock} for d in packet.drivers],
+        "contra": [c.series for c in packet.contra],
     }
 
 
@@ -41,7 +43,7 @@ def dump_core(packet):
 def evaluate(current, previous):
     """Return the list of material-change reasons; empty means suppress.
 
-    `current` is a live packet; `previous` is {"as_of", "payload"} from the
+    `current` is a live Packet; `previous` is {"as_of", "payload"} from the
     store. Only the stored payload crosses JSON.
     """
     if previous is None:
@@ -78,23 +80,23 @@ def evaluate(current, previous):
     return reasons
 
 
-def agent_prompt(packet, reasons):
+def agent_prompt(packet: Packet, reasons):
     """A targeted prompt naming only actual anomalies, for manual pasting."""
     lines = [
         "Deterministic macro state:",
-        f"asof={packet['as_of']}",
-        f"econ={packet['econ']} (affinity {packet['econ_affinity']:.2f}, "
-        f"{packet['econ_impulse']})",
-        f"financial={packet['financial']}",
+        f"asof={packet.as_of}",
+        f"econ={packet.econ} (affinity {packet.econ_affinity:.2f}, "
+        f"{packet.econ_impulse})",
+        f"financial={packet.financial}",
         "",
         "Material changes:",
     ]
     lines.extend(reasons or ["(none recorded)"])
     lines.append("")
-    if packet["contra"]:
+    if packet.contra:
         lines.append("Contradictions:")
         lines.extend(f"{c.series} disagrees with its factor's direction"
-                     for c in packet["contra"])
+                     for c in packet.contra)
         lines.append("")
     lines.append("Research only:")
     for r in research_questions(packet, reasons):
@@ -107,15 +109,15 @@ def agent_prompt(packet, reasons):
     return "\n".join(lines)
 
 
-def research_questions(packet, reasons):
+def research_questions(packet: Packet, reasons):
     """Generated questions aimed at falsifying the classification — no
     generic 'research macro conditions' filler."""
     questions = []
-    for d in packet["drivers"]:
+    for d in packet.drivers:
         questions.append(
             f"What drove the {'rise' if d.shock > 0 else 'fall'} in {d.series}?"
         )
-    for c in packet["contra"]:
+    for c in packet.contra:
         questions.append(
             f"Why does {c.series} disagree with its factor's direction — bad data, lag, or regime break?"
         )
