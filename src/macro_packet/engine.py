@@ -97,7 +97,7 @@ def indicator_readings(store, specs, as_of):
     return readings
 
 
-def factor_states(readings, specs=INDICATORS):
+def factor_states(readings):
     """Factor states from a set of readings: contributions summed per factor.
 
     Weights renormalize over available indicators so contributions always
@@ -107,7 +107,7 @@ def factor_states(readings, specs=INDICATORS):
     for spec, z in readings.values():
         by_factor[spec.factor].append((spec, z))
 
-    total_weights = {f: sum(s.weight for s in specs if s.factor == f) for f in FACTORS}
+    total_weights = {f: sum(s.weight for s in INDICATORS if s.factor == f) for f in FACTORS}
     states = {}
     for factor, members in by_factor.items():
         available_weight = sum(s.weight for s, _ in members)
@@ -116,7 +116,7 @@ def factor_states(readings, specs=INDICATORS):
             w = spec.weight / available_weight if available_weight else 0.0
             contributions.append(Reading(spec.series, factor, round(z, 6), round(w, 6), round(z * w, 6)))
         missing = tuple(sorted(
-            s.series for s in specs if s.factor == factor
+            s.series for s in INDICATORS if s.factor == factor
             and s.series not in readings
         ))
         total_weight = total_weights[factor]
@@ -140,12 +140,12 @@ def factor_impulses(factors, before_factors):
     return impulses
 
 
-def analyze(store, as_of, specs=INDICATORS):
+def analyze(store, as_of):
     """The single store pass every downstream computation consumes."""
-    readings = indicator_readings(store, specs, as_of)
-    before_readings = indicator_readings(store, specs, lookback_boundary(as_of))
-    factors = factor_states(readings, specs)
-    before_factors = factor_states(before_readings, specs)
+    readings = indicator_readings(store, INDICATORS, as_of)
+    before_readings = indicator_readings(store, INDICATORS, lookback_boundary(as_of))
+    factors = factor_states(readings)
+    before_factors = factor_states(before_readings)
     return Analysis(
         as_of=as_of,
         readings=readings,

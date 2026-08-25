@@ -9,9 +9,9 @@ deterministic given the same store and code.
 from dataclasses import dataclass
 
 from macro_packet.diagnostics import Contradiction, Driver, contradictions, drivers
-from macro_packet.engine import Analysis, analyze, fmt_conf, fmt_signed, parse_date
+from macro_packet.engine import analyze, fmt_conf, fmt_signed, parse_date
 from macro_packet.regimes import economic_regime, financial_regime, regime_impulse
-from macro_packet.specs import FACTORS, INDICATORS
+from macro_packet.specs import FACTORS
 
 
 @dataclass(frozen=True)
@@ -32,19 +32,15 @@ class Packet:
 
 # Factor-specific impulse wording overrides; factors not listed use the
 # plain up/down/flat vocabulary.
-IMPULSE_WORD_OVERRIDES = {
-    "L": {"up": "tighter", "down": "easier"},
-    "S": {"up": "rising", "down": "calming"},
+IMPULSE_WORDS = {
+    ("L", "up"): "tighter", ("L", "down"): "easier",
+    ("S", "up"): "rising", ("S", "down"): "calming",
 }
 
 
-def impulse_word(factor, impulse):
-    return IMPULSE_WORD_OVERRIDES.get(factor, {}).get(impulse, impulse)
-
-
-def build_packet(store, as_of, specs=INDICATORS) -> Packet:
+def build_packet(store, as_of) -> Packet:
     """Compute every packet ingredient at an explicit as-of boundary."""
-    analysis = analyze(store, as_of, specs)
+    analysis = analyze(store, as_of)
     f, b = analysis.factors, analysis.before_factors
 
     affinities, primary = economic_regime(f["G"].state, f["I"].state)
@@ -83,7 +79,7 @@ def render_packet(packet: Packet):
     lines.append(f"financial: {packet.financial}")
     for factor in FACTORS:
         fs = packet.factors[factor]
-        word = impulse_word(factor, packet.impulses[factor])
+        word = IMPULSE_WORDS.get((factor, packet.impulses[factor]), packet.impulses[factor])
         lines.append(f"{factor}: [{fmt_signed(fs.state)}, {word}, {fmt_conf(fs.confidence)}]")
     lines.append(f"confirm: {packet.confirm}")
     for section, items in (("drivers", packet.drivers), ("contra", packet.contra)):
