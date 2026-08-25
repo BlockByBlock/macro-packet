@@ -1,6 +1,6 @@
 # MacroPacket
 
-A local, deterministic macro engine. It fetches free FRED data into a point-in-time store, computes five macro factors and two regime classifications locally, and emits a **state packet** — ~450 tokens of YAML an AI agent can reason over cheaply. A **materiality gate** suppresses agent calls unless something material changed: local software does compression; the agent handles ambiguity.
+A local, deterministic macro engine. It fetches free FRED data into a point-in-time store, computes five macro factors and two regime classifications locally, and emits a **state packet** — ~100–150 tokens of YAML an AI agent can reason over cheaply. A **materiality gate** suppresses agent calls unless something material changed: local software does compression; the agent handles ambiguity.
 
 ## Quickstart (once per clone)
 
@@ -28,7 +28,7 @@ uv run macro-packet update && uv run macro-packet agent-prompt
 
 - Exit 1 — no material change since the last snapshot. Stop; spend no tokens.
 - Exit 0 — the gate fired. The output is a ready-made prompt carrying the
-  state packet (~450 tokens); reason over it and answer its questions.
+  state packet (~100–150 tokens); reason over it and answer its questions.
 
 Sample (first run — no prior snapshot):
 

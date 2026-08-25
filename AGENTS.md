@@ -22,7 +22,7 @@ Answering any macro question starts at the gate:
 
 Exit code 1 means the materiality gate suppressed the call — nothing material
 changed since the last snapshot; stop there. Exit code 0 prints a prompt
-carrying the state packet (~450 tokens of YAML). Reason over that packet as
+carrying the state packet (~100–150 tokens of YAML). Reason over that packet as
 the sole engine output, naming factors and regimes per the glossary in
 [`CONTEXT.md`](CONTEXT.md).
 
