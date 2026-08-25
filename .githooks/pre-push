@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Blocks pushing secrets or local data to a public remote.
+# Enable once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+# Paths that must never be tracked, regardless of .gitignore state.
+BLOCKED='(^|/)\.env($|\.)|\.db$|\.sqlite3?$|\.parquet$|(^|/)data/|(^|/)snapshots/|\.pem$|\.key$|(^|/)\.claude/settings\.local\.json$'
+
+# Secret-shaped literals. FRED keys are 32 lowercase hex chars.
+SECRETS='(FRED_APIKEY|api_key|apikey|secret|token|password)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_./+-]{16,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}'
+
+fail() { echo "pre-push BLOCKED: $1" >&2; echo "Fix the commit, or bypass deliberately with --no-verify." >&2; exit 1; }
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range="$local_sha"          # new branch: check every reachable commit
+    files=$(git ls-tree -r --name-only "$local_sha" | grep -vE "(^|/)\\.env\\.example$" || true)
+    diff_cmd=(git log -p --no-color "$local_sha")
+  else
+    range="$remote_sha..$local_sha"
+    files=$(git diff --name-only "$remote_sha" "$local_sha" | grep -vE "(^|/)\\.env\\.example$" || true)
+    diff_cmd=(git diff --no-color "$remote_sha" "$local_sha")
+  fi
+
+  if hits=$(printf '%s\n' "$files" | grep -nEi "$BLOCKED" || true); [ -n "$hits" ]; then
+    fail "sensitive path(s) in $range:"$'\n'"$hits"
+  fi
+
+  if hits=$("${diff_cmd[@]}" | grep -nE '^\+' | grep -Ei "$SECRETS" | grep -v 'abc123' || true); [ -n "$hits" ]; then
+    fail "secret-shaped literal(s) in $range:"$'\n'"$(printf '%s' "$hits" | cut -c1-120)"
+  fi
+done
+echo "pre-push: no secrets or local data detected."

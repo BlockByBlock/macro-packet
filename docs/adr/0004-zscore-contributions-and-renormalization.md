@@ -1,0 +1,3 @@
+# Clamped z-score is the canonical contribution unit; weights renormalize over available inputs
+
+Indicator contributions must be comparable before weighted aggregation into factors. We chose clamped z-scores over rolling percentiles because percentile ranks compress exactly the tails where shock detection (`> 1.5σ` triggers, driver ranking) needs resolution, and ADR-0003's clamping already fixes z-score outlier fragility. When an indicator is unavailable at an as-of boundary (release lag, fetch failure), remaining indicators' weights renormalize to sum to 1 rather than failing the factor; the packet's confidence reflects actual input usage. A hard coverage floor was considered and deferred (see `TODO.md`).

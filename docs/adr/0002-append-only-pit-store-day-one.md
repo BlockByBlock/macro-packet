@@ -1,0 +1,3 @@
+# Point-in-time storage is append-only and release-timestamped from the first fetch
+
+The plan's hardest requirement (§8) is that any calculation sees only information available at `as_of`. Retrofitting vintages later would mean re-downloading history through a different API, so economic series are ingested from day one as append-only rows keyed by `(series, observation_period, value, release_timestamp)` via vintage dates — served directly by the regular FRED observations endpoint via its `vintage_dates`/`realtime_start` parameters; no separate ALFRED host is needed (verified 2026-08-25). Market series (VIX, WTI, DXY) have no vintages anywhere; their point-in-time blindness for backtests is accepted explicitly rather than discovered late.
