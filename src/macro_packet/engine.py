@@ -12,7 +12,6 @@ import datetime
 import math
 from dataclasses import dataclass
 
-from macro_packet.regimes import economic_regime, financial_regime
 from macro_packet.specs import FACTORS, INDICATORS
 
 # Pipeline tuning (not per-indicator config).
@@ -164,24 +163,3 @@ def fmt_conf(c):
     return f"{c:.2f}"
 
 
-def render_state(analysis: Analysis):
-    """Deterministic YAML rendering of an analysis: factors plus both regimes."""
-    lines = [f"asof: {parse_date(analysis.as_of).isoformat()}"]
-    for factor in FACTORS:
-        fs = analysis.factors[factor]
-        lines.append(
-            f"{factor}: [{fmt_signed(fs.state)}, {analysis.impulses[factor]}, {fmt_conf(fs.confidence)}]"
-        )
-    affinities, primary = economic_regime(analysis.factors["G"].state, analysis.factors["I"].state)
-    lines.append(f"econ: {primary}")
-    lines.append("econ_affinity:")
-    lines.extend(f"  {name}: {affinities[name]:.2f}" for name in sorted(affinities))
-    lines.append(
-        "financial: "
-        + financial_regime(analysis.factors["R"].state, analysis.factors["L"].state, analysis.factors["S"].state)
-    )
-    missing = [s for f in FACTORS for s in analysis.factors[f].missing]
-    if missing:
-        lines.append("missing:")
-        lines.extend(f"  - {series}" for series in missing)
-    return "\n".join(lines) + "\n"

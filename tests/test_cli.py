@@ -53,6 +53,61 @@ def test_state_command_prints_yaml_factors(tmp_path, capsys):
     assert "asof:" in out and "G: [" in out and "S: [" in out
 
 
+def test_state_and_packet_print_identical_bytes(tmp_path, capsys):
+    """Spec story 5: one canonical textual view of macro state."""
+    from conftest import AS_OF
+    db = tmp_path / "same.db"
+    _seed_full_store(db)
+    assert main(["state", "--db", str(db), "--as-of", AS_OF]) == 0
+    state_out = capsys.readouterr().out
+    assert main(["packet", "--db", str(db), "--as-of", AS_OF]) == 0
+    packet_out = capsys.readouterr().out
+    assert state_out.encode() == packet_out.encode()
+
+
+def test_suppressed_gate_names_the_previous_asof(tmp_path, capsys):
+    """Spec stories 6-8: suppression messages pin the prior snapshot date;
+    gate helper returns plain values, never store rows."""
+    from conftest import AS_OF, seed_scenario
+    db = tmp_path / "gold.db"
+    seed_scenario(Store(db))
+    assert main(["packet", "--db", str(db), "--as-of", AS_OF]) == 0
+    capsys.readouterr()
+    assert main(["should-query-agent", "--db", str(db),
+                 "--as-of", "2026-09-01"]) == 0
+    assert capsys.readouterr().out == (
+        "false — no material change since 2026-08-25; no agent call\n"
+    )
+    code = main(["agent-prompt", "--db", str(db), "--as-of", "2026-09-01"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == (
+        "no material change since 2026-08-25; agent call suppressed.\n"
+    )
+
+
+def test_should_query_agent_fires_when_no_snapshot_recorded(tmp_path, capsys):
+    """Spec story 8: an unrecorded history still answers, readable."""
+    from conftest import AS_OF
+    db = tmp_path / "fresh.db"
+    _seed_full_store(db)
+    assert main(["should-query-agent", "--db", str(db), "--as-of", AS_OF]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("true")
+    assert "no previous snapshot recorded" in out
+
+
+def test_agent_prompt_prints_prompt_when_no_snapshot_recorded(tmp_path, capsys):
+    """Spec testing grid: agent-prompt x never-recorded-snapshot fires."""
+    from conftest import AS_OF
+    db = tmp_path / "fresh-ap.db"
+    _seed_full_store(db)
+    assert main(["agent-prompt", "--db", str(db), "--as-of", AS_OF]) == 0
+    out = capsys.readouterr().out
+    assert "Deterministic macro state:" in out
+    assert "no previous snapshot recorded" in out
+
+
 def test_packet_command_prints_and_records_snapshot(tmp_path, capsys):
     from conftest import AS_OF
     db = tmp_path / "p.db"

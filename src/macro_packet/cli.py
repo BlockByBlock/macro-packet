@@ -5,11 +5,10 @@ import datetime
 import sys
 from pathlib import Path
 
-from macro_packet.engine import analyze, render_state
+from macro_packet.packet import build_packet, render_packet
 from macro_packet.fred import SERIES, fetch_series
 from macro_packet.materiality import agent_prompt as render_agent_prompt
 from macro_packet.materiality import dump_core, evaluate
-from macro_packet.packet import build_packet, render_packet
 from macro_packet.store import Store
 
 DEFAULT_DB = Path("data/macro.db")
@@ -52,7 +51,8 @@ def cmd_update(args):
 
 
 def cmd_state(args):
-    print(render_state(analyze(Store(args.db), _as_of(args))), end="")
+    """Alias of `packet`: one canonical YAML view of macro state."""
+    print(render_packet(build_packet(Store(args.db), _as_of(args))), end="")
     return 0
 
 
@@ -70,18 +70,24 @@ def cmd_packet(args):
 
 
 def _gate_reasons(store, args):
-    """Shared gate evaluation for should-query-agent / agent-prompt."""
-    packet = build_packet(store, _as_of(args))
-    previous = store.latest_snapshot_before(_as_of(args))
+    """Shared gate evaluation for should-query-agent / agent-prompt.
+
+    Returns plain values: the packet, the as-of date of the latest prior
+    snapshot (None when never recorded), and the material-change reasons.
+    Snapshot storage shape stays inside the store/materiality modules.
+    """
+    as_of = _as_of(args)
+    packet = build_packet(store, as_of)
+    previous = store.latest_snapshot_before(as_of)
     reasons = evaluate(packet, previous)
     store.record_gate(bool(reasons), reasons)
-    return packet, previous, reasons
+    return packet, previous["as_of"] if previous else None, reasons
 
 
 def cmd_should_query_agent(args):
-    _, previous, reasons = _gate_reasons(Store(args.db), args)
+    _, previous_as_of, reasons = _gate_reasons(Store(args.db), args)
     if not reasons:
-        since = previous["as_of"] if previous else "(never)"
+        since = previous_as_of if previous_as_of else "(never)"
         print(f"false — no material change since {since}; no agent call")
     else:
         print("true")
@@ -91,9 +97,9 @@ def cmd_should_query_agent(args):
 
 
 def cmd_agent_prompt(args):
-    packet, previous, reasons = _gate_reasons(Store(args.db), args)
+    packet, previous_as_of, reasons = _gate_reasons(Store(args.db), args)
     if not reasons:
-        print(f"no material change since {previous['as_of']}; agent call suppressed.",
+        print(f"no material change since {previous_as_of}; agent call suppressed.",
               file=sys.stderr)
         return 1
     print(render_agent_prompt(packet, reasons))
@@ -107,7 +113,8 @@ _DATED.add_argument("--as-of", default=None)
 
 COMMANDS = {
     "update": ("fetch all series into the local store", _COMMON, cmd_update),
-    "state": ("print the five factors and regimes as YAML", _DATED, cmd_state),
+    "state": ("print the compact state packet (alias of packet)", _DATED,
+              cmd_state),
     "packet": ("print the compact state packet", _DATED, cmd_packet),
     "should-query-agent": ("decide whether an agent call is justified", _DATED,
                            cmd_should_query_agent),
