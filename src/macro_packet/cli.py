@@ -51,7 +51,7 @@ def cmd_update(args):
 
 
 def cmd_state(args):
-    """Alias of `packet`: one canonical YAML view of macro state."""
+    """Read-only view: prints the packet without recording a snapshot."""
     print(render_packet(build_packet(Store(args.db), _as_of(args))), end="")
     return 0
 
@@ -87,8 +87,7 @@ def _gate_reasons(store, args):
 def cmd_should_query_agent(args):
     _, previous_as_of, reasons = _gate_reasons(Store(args.db), args)
     if not reasons:
-        since = previous_as_of if previous_as_of else "(never)"
-        print(f"false — no material change since {since}; no agent call")
+        print(f"false — no material change since {previous_as_of}; no agent call")
     else:
         print("true")
         for reason in reasons:
@@ -113,8 +112,8 @@ _DATED.add_argument("--as-of", default=None)
 
 COMMANDS = {
     "update": ("fetch all series into the local store", _COMMON, cmd_update),
-    "state": ("print the compact state packet (alias of packet)", _DATED,
-              cmd_state),
+    "state": ("print the compact packet without recording a snapshot",
+              _DATED, cmd_state),
     "packet": ("print the compact state packet", _DATED, cmd_packet),
     "should-query-agent": ("decide whether an agent call is justified", _DATED,
                            cmd_should_query_agent),

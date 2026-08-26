@@ -155,11 +155,3 @@ def analyze(store, as_of):
     )
 
 
-def fmt_signed(x):
-    return f"{x:+.2f}"
-
-
-def fmt_conf(c):
-    return f"{c:.2f}"
-
-
