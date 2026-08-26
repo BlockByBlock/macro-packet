@@ -105,6 +105,8 @@ def agent_prompt(packet: Packet, reasons):
         "",
         "Try to falsify the classification.",
         "Keep the answer concise.",
+        "Write the answer in Simplified Technical English: active voice,",
+        "short sentences (max 20 words), one idea per sentence.",
     ])
     return "\n".join(lines)
 
