@@ -9,9 +9,17 @@ deterministic given the same store and code.
 from dataclasses import dataclass
 
 from macro_packet.diagnostics import Contradiction, Driver, contradictions, drivers
-from macro_packet.engine import analyze, fmt_conf, fmt_signed, parse_date
+from macro_packet.engine import analyze, parse_date
 from macro_packet.regimes import economic_regime, financial_regime, regime_impulse
 from macro_packet.specs import FACTORS
+
+
+def fmt_signed(x):
+    return f"{x:+.2f}"
+
+
+def fmt_conf(c):
+    return f"{c:.2f}"
 
 
 @dataclass(frozen=True)

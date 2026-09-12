@@ -7,7 +7,7 @@ import datetime
 
 import pytest
 
-from macro_packet.engine import analyze, indicator_readings, render_state
+from macro_packet.engine import analyze, indicator_readings
 from macro_packet.specs import INDICATORS
 from macro_packet.store import Observation, Store
 
@@ -136,16 +136,3 @@ def test_flat_indicator_carries_zero_signal_not_missing(tmp_path):
     assert z == 0.0
 
 
-def test_render_state_includes_factors_and_regimes_deterministically():
-    def build(db):
-        s = Store(db)
-        s.ingest(_weekly("ICSA", datetime.date(2025, 8, 1), 56, lambda i: 220_000))
-        s.ingest(_monthly("PAYEMS", 14, lambda i: 150_000 + 20 * i))
-        s.ingest(_monthly("UNRATE", 14, lambda i: 4.2))
-        return render_state(analyze(s, AS_OF))
-
-    a = build(":memory:")
-    b = build(":memory:")
-    assert a.encode() == b.encode()
-    assert "asof: 2026-08-25\n" in a
-    assert "econ: " in a and "financial: " in a and "econ_affinity:" in a

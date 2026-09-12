@@ -65,19 +65,20 @@ def test_regime_impulse_follows_slowdown_affinity_movement():
     assert regime_impulse(0.5, 0.2, 0.5, 0.2) == "improving"
 
 
-def test_regime_output_renders_deterministically_via_state():
-    """The full affinity map lives in `macro-packet state`; packet shows the
-    primary affinity only. Rendering goes through engine.render_state."""
-    from macro_packet.engine import analyze, render_state
+def test_regime_output_renders_deterministically_via_packet():
+    """The state packet carries the primary regime label and affinity;
+    banned vocabulary never appears. Rendering goes through
+    packet.render_packet — the repo's single renderer."""
+    from macro_packet.packet import build_packet, render_packet
     from macro_packet.store import Store
 
     def build(db):
         s = Store(db)
         s.ingest([Observation("DGS2", f"2026-{m:02d}-01", 3.5, f"2026-{m:02d}-02")
                   for m in range(1, 9)])
-        return render_state(analyze(s, "2026-08-25"))
+        return render_packet(build_packet(s, "2026-08-25"))
 
     a, b = build(":memory:"), build(":memory:")
     assert a.encode() == b.encode()
-    assert "econ_affinity:" in a
+    assert "econ_affinity: " in a
     assert "probability" not in a.lower()
