@@ -38,4 +38,5 @@ databases, `data/`, and secret-shaped literals. Enable it once per clone:
 
     git config core.hooksPath .githooks
 
-CI runs gitleaks over full history on every push and PR.
+CI runs the tests and full-history gitleaks scan on PRs or manual dispatch;
+superseded runs are cancelled. Direct pushes do not run CI.
