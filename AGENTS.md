@@ -38,5 +38,5 @@ databases, `data/`, and secret-shaped literals. Enable it once per clone:
 
     git config core.hooksPath .githooks
 
-CI runs the tests and full-history gitleaks scan on PRs or manual dispatch;
-superseded runs are cancelled. Direct pushes do not run CI.
+App CI is manual-only; run it on the final PR branch before merging. Full-history
+gitleaks still scans every PR. Both workflows cancel superseded runs.
